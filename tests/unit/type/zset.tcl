@@ -2967,6 +2967,32 @@ start_server {tags {"zset"}} {
         assert_match "*syntax*" $err
     }
 
+    test {ZRANGE/ZREVRANGE/ZRANGESTORE reject LIMIT in index mode, including LIMIT <offset> -1} {
+        # A LIMIT count of -1 means "all" with BYSCORE/BYLEX, but it must not
+        # make LIMIT acceptable (and silently ignored) in index mode.
+        r del z1{t} z2{t}
+        r zadd z1{t} 1 a 2 b 3 c
+        foreach cmd {
+            {zrange z1{t} 0 -1}
+            {zrange z1{t} 0 -1 REV}
+            {zrevrange z1{t} 0 -1}
+            {zrangestore z2{t} z1{t} 0 -1}
+        } {
+            foreach limit {{0 -1} {1 -1} {-1 -1} {0 1} {0 -2} {0 0}} {
+                assert_error "*LIMIT is only supported*" {r {*}$cmd limit {*}$limit}
+            }
+        }
+        assert_equal 0 [r exists z2{t}]
+
+        # Without LIMIT, and with LIMIT -1 in BYSCORE/BYLEX mode, nothing changes.
+        assert_equal {a b c} [r zrange z1{t} 0 -1]
+        assert_equal {a b c} [r zrange z1{t} 0 10 BYSCORE limit 0 -1]
+        assert_equal {b c} [r zrange z1{t} 0 10 BYSCORE limit 1 -1]
+        assert_equal {c b a} [r zrange z1{t} 10 0 BYSCORE REV limit 0 -1]
+        assert_equal {a b c} [r zrange z1{t} - + BYLEX limit 0 -1]
+        assert_equal 3 [r zrangestore z2{t} z1{t} 0 10 BYSCORE limit 0 -1]
+    }
+
     test {ZRANGESTORE with zset-max-listpack-entries 0 #10767 case} {
         set original_max [lindex [r config get zset-max-listpack-entries] 1]
         r config set zset-max-listpack-entries 0

@@ -3047,6 +3047,7 @@ void zrangeGenericCommand(zrange_result_handler *handler,
     int opt_keyexist = 0;
     long opt_offset = 0;
     long opt_limit = -1;
+    int opt_limit_given = 0; /* LIMIT was passed; opt_limit == -1 is a valid count (all). */
 
     /* Step 1: Skip the <src> <min> <max> args and parse remaining optional arguments. */
     for (int j = argc_start + 3; j < c->argc; j++) {
@@ -3060,6 +3061,7 @@ void zrangeGenericCommand(zrange_result_handler *handler,
                 (getLongFromObjectOrReply(c, c->argv[j + 2], &opt_limit, NULL) != C_OK)) {
                 return;
             }
+            opt_limit_given = 1;
             j += 2;
         } else if (direction == ZRANGE_DIRECTION_AUTO && !strcasecmp(objectGetVal(c->argv[j]), "rev")) {
             direction = ZRANGE_DIRECTION_REVERSE;
@@ -3078,7 +3080,7 @@ void zrangeGenericCommand(zrange_result_handler *handler,
     if (rangetype == ZRANGE_AUTO) rangetype = ZRANGE_RANK;
 
     /* Check for conflicting arguments. */
-    if (opt_limit != -1 && rangetype == ZRANGE_RANK) {
+    if (opt_limit_given && rangetype == ZRANGE_RANK) {
         addReplyError(c, "syntax error, LIMIT is only supported in combination with either BYSCORE or BYLEX");
         return;
     }
