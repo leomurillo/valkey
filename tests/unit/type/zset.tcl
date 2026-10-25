@@ -730,6 +730,26 @@ start_server {tags {"zset"}} {
             assert_equal {i0}          [r zrevrangebyscore zset 20 0 LIMIT 20 5]
         }
 
+        test "ZRANGE BYSCORE/BYLEX with a negative LIMIT count (LONG_MIN) means no limit - $encoding" {
+            # The range loops decrement the count, so LONG_MIN must not overflow.
+            r del zlimit zlimitdst
+            r zadd zlimit 1 a 2 b 3 c 4 d
+            assert_encoding $encoding zlimit
+            foreach count {-1 -2 -9223372036854775807 -9223372036854775808} {
+                assert_equal {a b c d} [r zrangebyscore zlimit -inf +inf LIMIT 0 $count]
+                assert_equal {c d} [r zrangebyscore zlimit -inf +inf LIMIT 2 $count]
+                assert_equal {d c b a} [r zrevrangebyscore zlimit +inf -inf LIMIT 0 $count]
+                assert_equal {b a} [r zrange zlimit +inf -inf BYSCORE REV LIMIT 2 $count]
+                assert_equal {a 1 b 2} [r zrange zlimit -inf 2 BYSCORE LIMIT 0 $count WITHSCORES]
+                assert_equal {a b c d} [r zrangebylex zlimit - + LIMIT 0 $count]
+                assert_equal {d c b a} [r zrevrangebylex zlimit + - LIMIT 0 $count]
+                assert_equal {b c d} [r zrange zlimit - + BYLEX LIMIT 1 $count]
+                assert_equal 4 [r zrangestore zlimitdst zlimit -inf +inf BYSCORE LIMIT 0 $count]
+                assert_equal {a b c d} [r zrange zlimitdst 0 -1]
+            }
+            r del zlimit zlimitdst
+        }
+
         test "ZRANGEBYSCORE with LIMIT and WITHSCORES - $encoding" {
             create_default_zset
             assert_equal {e 4 f 5} [r zrangebyscore zset 2 5 LIMIT 2 3 WITHSCORES]
@@ -1678,6 +1698,12 @@ start_server {tags {"zset"}} {
         assert_error "ERR syntax error*" {r zmpop 1 myzset{t} COUNT}
         assert_error "ERR syntax error*" {r zmpop 1 myzset{t} MAX COUNT 1 COUNT 2}
         assert_error "ERR syntax error*" {r zmpop 2 myzset{t} myzset2{t} bad_arg}
+        assert_error "ERR syntax error*" {r zmpop 3 myzset{t} myzset2{t} MIN}
+        # numkeys near LONG_MAX must be a plain syntax error, not an index overflow
+        foreach numkeys {9223372036854775807 9223372036854775806 9223372036854775805} {
+            assert_error "ERR syntax error*" {r zmpop $numkeys myzset{t} MIN}
+            assert_error "ERR syntax error*" {r zmpop $numkeys myzset{t} MAX COUNT 1}
+        }
 
         assert_error "ERR count*" {r zmpop 1 myzset{t} MIN COUNT 0}
         assert_error "ERR count*" {r zmpop 1 myzset{t} MAX COUNT a}
@@ -2657,6 +2683,12 @@ start_server {tags {"zset"}} {
         assert_error "ERR syntax error*" {r bzmpop 1 1 myzset{t} COUNT}
         assert_error "ERR syntax error*" {r bzmpop 1 1 myzset{t} MIN COUNT 1 COUNT 2}
         assert_error "ERR syntax error*" {r bzmpop 1 2 myzset{t} myzset2{t} bad_arg}
+        assert_error "ERR syntax error*" {r bzmpop 1 3 myzset{t} myzset2{t} MIN}
+        # numkeys near LONG_MAX must be a plain syntax error, not an index overflow
+        foreach numkeys {9223372036854775807 9223372036854775806 9223372036854775805} {
+            assert_error "ERR syntax error*" {r bzmpop 1 $numkeys myzset{t} MIN}
+            assert_error "ERR syntax error*" {r bzmpop 1 $numkeys myzset{t} MAX COUNT 1}
+        }
 
         assert_error "ERR count*" {r bzmpop 1 1 myzset{t} MIN COUNT 0}
         assert_error "ERR count*" {r bzmpop 1 1 myzset{t} MAX COUNT a}

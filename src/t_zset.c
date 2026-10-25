@@ -3087,6 +3087,10 @@ void zrangeGenericCommand(zrange_result_handler *handler,
         return;
     }
 
+    /* Any negative LIMIT count means no limit. Normalize it so that the
+     * 'limit--' in the range loops can't overflow when the count is LONG_MIN. */
+    if (opt_limit < 0) opt_limit = -1;
+
     if (direction == ZRANGE_DIRECTION_REVERSE && ((ZRANGE_SCORE == rangetype) || (ZRANGE_LEX == rangetype))) {
         /* Range is given as [max,min] */
         int tmp = maxidx;
@@ -3875,12 +3879,14 @@ void zmpopGenericCommand(client *c, int numkeys_idx, int is_block) {
                                       "numkeys should be greater than 0") != C_OK)
         return;
 
-    /* Parse the where. where_idx: the index of where in the c->argv. */
-    long where_idx = numkeys_idx + numkeys + 1;
-    if (where_idx >= c->argc) {
+    /* Parse the where. where_idx: the index of where in the c->argv.
+     * Check numkeys against argc first so that computing where_idx can't
+     * overflow when numkeys is close to LONG_MAX. */
+    if (numkeys >= c->argc - numkeys_idx - 1) {
         addReplyErrorObject(c, shared.syntaxerr);
         return;
     }
+    long where_idx = numkeys_idx + numkeys + 1;
     if (!strcasecmp(objectGetVal(c->argv[where_idx]), "MIN")) {
         where = ZSET_MIN;
     } else if (!strcasecmp(objectGetVal(c->argv[where_idx]), "MAX")) {
