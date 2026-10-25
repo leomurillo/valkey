@@ -1793,11 +1793,41 @@ foreach {type large} [array get largevalue] {
         assert_error "ERR syntax error*" {r lmpop 1 mylist{t} COUNT}
         assert_error "ERR syntax error*" {r lmpop 1 mylist{t} LEFT COUNT 1 COUNT 2}
         assert_error "ERR syntax error*" {r lmpop 2 mylist{t} mylist2{t} bad_arg}
+        assert_error "ERR syntax error*" {r lmpop 3 mylist{t} mylist2{t} LEFT}
+        # numkeys near LONG_MAX must be a plain syntax error, not an index overflow
+        foreach numkeys {9223372036854775807 9223372036854775806 9223372036854775805} {
+            assert_error "ERR syntax error*" {r lmpop $numkeys mylist{t} LEFT}
+            assert_error "ERR syntax error*" {r lmpop $numkeys mylist{t} RIGHT COUNT 1}
+        }
 
         assert_error "ERR count*" {r lmpop 1 mylist{t} LEFT COUNT 0}
         assert_error "ERR count*" {r lmpop 1 mylist{t} RIGHT COUNT a}
         assert_error "ERR count*" {r lmpop 1 mylist{t} LEFT COUNT -1}
         assert_error "ERR count*" {r lmpop 2 mylist{t} mylist2{t} RIGHT COUNT -1}
+    }
+
+    test {BLMPOP with illegal argument} {
+        assert_error "ERR wrong number of arguments for 'blmpop' command" {r blmpop}
+        assert_error "ERR wrong number of arguments for 'blmpop' command" {r blmpop 1}
+        assert_error "ERR wrong number of arguments for 'blmpop' command" {r blmpop 1 1}
+        assert_error "ERR wrong number of arguments for 'blmpop' command" {r blmpop 1 1 mylist{t}}
+
+        assert_error "ERR numkeys*" {r blmpop 1 0 mylist{t} LEFT}
+        assert_error "ERR numkeys*" {r blmpop 1 a mylist{t} LEFT}
+        assert_error "ERR numkeys*" {r blmpop 1 -1 mylist{t} RIGHT}
+
+        assert_error "ERR syntax error*" {r blmpop 1 1 mylist{t} bad_where}
+        assert_error "ERR syntax error*" {r blmpop 1 1 mylist{t} LEFT bar_arg}
+        assert_error "ERR syntax error*" {r blmpop 1 2 mylist{t} mylist2{t} bad_arg}
+        assert_error "ERR syntax error*" {r blmpop 1 3 mylist{t} mylist2{t} LEFT}
+        # numkeys near LONG_MAX must be a plain syntax error, not an index overflow
+        foreach numkeys {9223372036854775807 9223372036854775806 9223372036854775805} {
+            assert_error "ERR syntax error*" {r blmpop 1 $numkeys mylist{t} LEFT}
+            assert_error "ERR syntax error*" {r blmpop 1 $numkeys mylist{t} RIGHT COUNT 1}
+        }
+
+        assert_error "ERR count*" {r blmpop 1 1 mylist{t} LEFT COUNT 0}
+        assert_error "ERR count*" {r blmpop 1 1 mylist{t} RIGHT COUNT a}
     }
 
 foreach {type large} [array get largevalue] {
